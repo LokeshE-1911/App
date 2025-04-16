@@ -1,4 +1,4 @@
-# ✅ Unified FastAPI Backend: One Endpoint with Three Modes
+# ✅ Unified FastAPI Backend: Roleplay API with Three Endpoints
 
 import os
 import csv
@@ -115,55 +115,57 @@ def generate_response(prompt, stage, role, session_id):
         return f"❌ Response error: {str(e)}"
 
 # ========================
-# Unified Roleplay Endpoint
+# /start - Create New Session
 # ========================
-class RolePlayInput(BaseModel):
-    mode: Literal["start", "chat", "scores"]
-    prompt: str = ""
-    role: Literal["seller", "buyer"] = "seller"
-    session_id: str = ""
+@app.get("/start")
+def start_session():
+    session_id = str(uuid4())
+    session_scores[session_id] = {
+        "opening": 0,
+        "discovery": 0,
+        "presentation": 0,
+        "objection_handling": 0,
+        "closing": 0,
+        "follow_up": 0,
+        "general": 0
+    }
+    return {"session_id": session_id}
+
+# ========================
+# /chat - Handle User Prompt
+# ========================
+class ChatInput(BaseModel):
+    prompt: str
+    role: Literal["seller", "buyer"]
+    session_id: str
     stage: str = "auto"
 
-@app.post("/roleplay")
-def handle_roleplay(data: RolePlayInput):
-    if data.mode == "start":
-        new_id = str(uuid4())
-        session_scores[new_id] = {
-            "opening": 0,
-            "discovery": 0,
-            "presentation": 0,
-            "objection_handling": 0,
-            "closing": 0,
-            "follow_up": 0,
-            "general": 0
-        }
-        return {"session_id": new_id, "response": "🆕 New session started.", "scores": session_scores[new_id]}
+@app.post("/chat")
+def chat_handler(data: ChatInput):
+    if data.session_id not in session_scores:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    response = generate_response(data.prompt, data.stage, data.role, data.session_id)
+    return {
+        "session_id": data.session_id,
+        "response": response,
+        "scores": session_scores[data.session_id]
+    }
 
-    elif data.mode == "chat":
-        if data.session_id not in session_scores:
-            raise HTTPException(status_code=400, detail="Invalid session_id")
-        if not data.prompt.strip():
-            raise HTTPException(status_code=400, detail="Prompt required for chat.")
-        reply = generate_response(data.prompt, data.stage, data.role, data.session_id)
-        return {
-            "session_id": data.session_id,
-            "response": reply,
-            "scores": session_scores[data.session_id]
-        }
-
-    elif data.mode == "scores":
-        if data.session_id not in session_scores:
-            raise HTTPException(status_code=400, detail="Invalid session_id")
-        return {
-            "session_id": data.session_id,
-            "scores": session_scores[data.session_id]
-        }
-
-    return {"error": "Invalid mode"}
+# ========================
+# /scores - Get Score Breakdown
+# ========================
+@app.get("/scores")
+def get_scores(session_id: str):
+    if session_id not in session_scores:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    return {
+        "session_id": session_id,
+        "scores": session_scores[session_id]
+    }
 
 # ========================
 # Root Route
 # ========================
 @app.get("/")
 def root():
-    return {"message": "✅ Unified Gemini FastAPI backend is live (use /roleplay)."}
+    return {"message": "✅ Roleplay API is live. Use /start, /chat, /scores."}
